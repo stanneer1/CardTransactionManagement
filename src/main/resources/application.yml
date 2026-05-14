@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: card-transaction-management
+
+# External API Configuration
+external:
+  api:
+    treasury:
+      base-url: https://fiscal.treasury.gov/
