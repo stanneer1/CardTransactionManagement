@@ -1,7 +1,9 @@
 package com.cardtransaction.controller;
 
+import com.cardtransaction.dto.PurchaseTransactionRequest;
 import com.cardtransaction.entity.PurchaseTransaction;
 import com.cardtransaction.repository.PurchaseTransactionRepository;
+import com.cardtransaction.util.HashUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -186,16 +188,30 @@ class PurchaseTransactionControllerIT {
     @DisplayName("Should retrieve all transactions")
     void testGetAllTransactions_Success() throws Exception {
         // Create a few transactions
+        PurchaseTransactionRequest req1 = PurchaseTransactionRequest.builder()
+                .description("Transaction 1")
+                .transactionDate(LocalDate.of(2024, 5, 10))
+                .purchaseAmount(new BigDecimal("100.00"))
+                .build();
+
+        PurchaseTransactionRequest req2 = PurchaseTransactionRequest.builder()
+                .description("Transaction 2")
+                .transactionDate(LocalDate.of(2024, 5, 11))
+                .purchaseAmount(new BigDecimal("200.00"))
+                .build();
+
         PurchaseTransaction t1 = PurchaseTransaction.builder()
                 .description("Transaction 1")
                 .transactionDate(LocalDate.of(2024, 5, 10))
                 .purchaseAmount(new BigDecimal("100.00"))
+                .hashValue(HashUtil.generateHash(req1))
                 .build();
 
         PurchaseTransaction t2 = PurchaseTransaction.builder()
                 .description("Transaction 2")
                 .transactionDate(LocalDate.of(2024, 5, 11))
                 .purchaseAmount(new BigDecimal("200.00"))
+                .hashValue(HashUtil.generateHash(req2))
                 .build();
 
         repository.save(t1);
@@ -213,10 +229,17 @@ class PurchaseTransactionControllerIT {
     @WithMockUser(username = "admin", roles = {"ADMIN"})
     @DisplayName("Should retrieve a transaction by ID")
     void testGetTransactionById_Success() throws Exception {
+        PurchaseTransactionRequest request = PurchaseTransactionRequest.builder()
+                .description("Test Transaction")
+                .transactionDate(LocalDate.of(2024, 5, 10))
+                .purchaseAmount(new BigDecimal("500.00"))
+                .build();
+
         PurchaseTransaction transaction = PurchaseTransaction.builder()
                 .description("Test Transaction")
                 .transactionDate(LocalDate.of(2024, 5, 10))
                 .purchaseAmount(new BigDecimal("500.00"))
+                .hashValue(HashUtil.generateHash(request))
                 .build();
 
         Long id = repository.save(transaction).getId();
@@ -243,10 +266,17 @@ class PurchaseTransactionControllerIT {
     @WithMockUser(username = "admin", roles = {"ADMIN"})
     @DisplayName("Should update a transaction")
     void testUpdateTransaction_Success() throws Exception {
+        PurchaseTransactionRequest originalRequest = PurchaseTransactionRequest.builder()
+                .description("Original")
+                .transactionDate(LocalDate.of(2024, 5, 10))
+                .purchaseAmount(new BigDecimal("100.00"))
+                .build();
+
         PurchaseTransaction transaction = PurchaseTransaction.builder()
                 .description("Original")
                 .transactionDate(LocalDate.of(2024, 5, 10))
                 .purchaseAmount(new BigDecimal("100.00"))
+                .hashValue(HashUtil.generateHash(originalRequest))
                 .build();
 
         Long id = repository.save(transaction).getId();
@@ -271,10 +301,17 @@ class PurchaseTransactionControllerIT {
     @WithMockUser(username = "admin", roles = {"ADMIN"})
     @DisplayName("Should delete a transaction")
     void testDeleteTransaction_Success() throws Exception {
+        PurchaseTransactionRequest request = PurchaseTransactionRequest.builder()
+                .description("To Delete")
+                .transactionDate(LocalDate.of(2024, 5, 10))
+                .purchaseAmount(new BigDecimal("100.00"))
+                .build();
+
         PurchaseTransaction transaction = PurchaseTransaction.builder()
                 .description("To Delete")
                 .transactionDate(LocalDate.of(2024, 5, 10))
                 .purchaseAmount(new BigDecimal("100.00"))
+                .hashValue(HashUtil.generateHash(request))
                 .build();
 
         Long id = repository.save(transaction).getId();

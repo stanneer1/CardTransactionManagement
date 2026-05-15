@@ -2,6 +2,8 @@ package com.cardtransaction.controller;
 
 import com.cardtransaction.entity.PurchaseTransaction;
 import com.cardtransaction.repository.PurchaseTransactionRepository;
+import com.cardtransaction.util.HashUtil;
+import com.cardtransaction.dto.PurchaseTransactionRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -47,10 +49,19 @@ class CurrencyConversionControllerIT {
     void setUp() {
         repository.deleteAll();
 
+        PurchaseTransactionRequest request = PurchaseTransactionRequest.builder()
+                .description("Test Product")
+                .transactionDate(LocalDate.of(2024, 5, 10))
+                .purchaseAmount(new BigDecimal("1000.00"))
+                .build();
+
+        String hashValue = HashUtil.generateHash(request);
+
         PurchaseTransaction transaction = PurchaseTransaction.builder()
                 .description("Test Product")
                 .transactionDate(LocalDate.of(2024, 5, 10))
                 .purchaseAmount(new BigDecimal("1000.00"))
+                .hashValue(hashValue)
                 .build();
 
         transactionId = repository.save(transaction).getId();

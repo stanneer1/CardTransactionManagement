@@ -1,5 +1,6 @@
 package com.cardtransaction.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.*;
 
 import java.math.BigDecimal;
@@ -13,6 +14,7 @@ public class PurchaseTransactionRequest {
 
     @NotNull(message = "Transaction date is required")
     @PastOrPresent(message = "Transaction date must not be in the future")
+    @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate transactionDate;
 
     @NotNull(message = "Purchase amount is required")

@@ -33,6 +33,9 @@ public class PurchaseTransaction {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDate createdAt;
 
+    @Column(name = "hash_value", nullable = false, unique = true, length = 64)
+    private String hashValue;
+
     // Constructors
     public PurchaseTransaction() {}
 
@@ -83,6 +86,14 @@ public class PurchaseTransaction {
         this.createdAt = createdAt;
     }
 
+    public String getHashValue() {
+        return hashValue;
+    }
+
+    public void setHashValue(String hashValue) {
+        this.hashValue = hashValue;
+    }
+
     // Builder pattern support
     public static Builder builder() {
         return new Builder();
@@ -94,6 +105,7 @@ public class PurchaseTransaction {
         private LocalDate transactionDate;
         private BigDecimal purchaseAmount;
         private LocalDate createdAt;
+        private String hashValue;
 
         public Builder id(Long id) {
             this.id = id;
@@ -120,6 +132,11 @@ public class PurchaseTransaction {
             return this;
         }
 
+        public Builder hashValue(String hashValue) {
+            this.hashValue = hashValue;
+            return this;
+        }
+
         public PurchaseTransaction build() {
             PurchaseTransaction transaction = new PurchaseTransaction();
             transaction.id = this.id;
@@ -127,6 +144,7 @@ public class PurchaseTransaction {
             transaction.transactionDate = this.transactionDate;
             transaction.purchaseAmount = this.purchaseAmount;
             transaction.createdAt = this.createdAt;
+            transaction.hashValue = this.hashValue;
             return transaction;
         }
     }
@@ -144,6 +162,7 @@ public class PurchaseTransaction {
                 ", transactionDate=" + transactionDate +
                 ", purchaseAmount=" + purchaseAmount +
                 ", createdAt=" + createdAt +
+                ", hashValue='" + hashValue + '\'' +
                 '}';
     }
 }

@@ -19,6 +19,8 @@ public class PurchaseTransactionResponse {
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate createdAt;
 
+    private String hashValue;
+
     // Constructors
     public PurchaseTransactionResponse() {}
 
@@ -63,6 +65,14 @@ public class PurchaseTransactionResponse {
         this.createdAt = createdAt;
     }
 
+    public String getHashValue() {
+        return hashValue;
+    }
+
+    public void setHashValue(String hashValue) {
+        this.hashValue = hashValue;
+    }
+
     // Builder pattern support
     public static Builder builder() {
         return new Builder();
@@ -74,6 +84,7 @@ public class PurchaseTransactionResponse {
         private LocalDate transactionDate;
         private BigDecimal purchaseAmount;
         private LocalDate createdAt;
+        private String hashValue;
 
         public Builder id(Long id) {
             this.id = id;
@@ -100,6 +111,11 @@ public class PurchaseTransactionResponse {
             return this;
         }
 
+        public Builder hashValue(String hashValue) {
+            this.hashValue = hashValue;
+            return this;
+        }
+
         public PurchaseTransactionResponse build() {
             PurchaseTransactionResponse response = new PurchaseTransactionResponse();
             response.id = this.id;
@@ -107,6 +123,7 @@ public class PurchaseTransactionResponse {
             response.transactionDate = this.transactionDate;
             response.purchaseAmount = this.purchaseAmount;
             response.createdAt = this.createdAt;
+            response.hashValue = this.hashValue;
             return response;
         }
     }
