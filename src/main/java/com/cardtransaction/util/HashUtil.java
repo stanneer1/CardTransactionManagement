@@ -14,7 +14,7 @@ import java.util.HexFormat;
 /**
  * Utility class for generating SHA-256 hashes for objects and strings.
  * Provides generic methods for hashing any object (via JSON serialization) or raw strings.
- *
+ * <p>
  * This utility is designed to be reusable across different use cases:
  * - Duplicate detection (transaction records, user data, etc.)
  * - Data integrity verification
