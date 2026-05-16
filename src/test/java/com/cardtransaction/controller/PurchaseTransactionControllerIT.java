@@ -82,10 +82,11 @@ class PurchaseTransactionControllerIT {
     @Test
     @DisplayName("Should accept request with basic authentication")
     void testCreateTransaction_WithBasicAuth() throws Exception {
+        String token = com.cardtransaction.security.HmacTokenService.generateToken("admin");
         mockMvc.perform(post("/v1/transactions")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(validTransactionJson)
-                .with(httpBasic("admin", "admin123")))
+                .header("Authorization", "Bearer " + token))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.description").value("Laptop Purchase"));
     }
@@ -357,10 +358,12 @@ class PurchaseTransactionControllerIT {
     @Test
     @DisplayName("Should reject request with invalid basic auth credentials")
     void testCreateTransaction_InvalidBasicAuth() throws Exception {
+        // Use an invalid token (tampered signature) to simulate unauthorized
+        String badToken = com.cardtransaction.security.HmacTokenService.generateToken("admin") + "x";
         mockMvc.perform(post("/v1/transactions")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(validTransactionJson)
-                .with(httpBasic("admin", "wrongpassword")))
+                .header("Authorization", "Bearer " + badToken))
                 .andExpect(status().isUnauthorized());
     }
 }
