@@ -4,6 +4,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
 
 /**
@@ -16,8 +17,8 @@ public final class HmacTokenService {
     private static final String DEFAULT_SECRET = "dev-secret";
     private static final String HMAC_ALGO = "HmacSHA256";
     private static final HexFormat HEX = HexFormat.of();
-    // token valid for 5 minutes
-    private static final long TTL_SECONDS = 300L;
+    // token valid for 1 hour by default; can be configured
+    private static long ttlSeconds = 3600L;
 
     private static String secret = System.getenv().getOrDefault("HMAC_SECRET", DEFAULT_SECRET);
 
@@ -25,6 +26,14 @@ public final class HmacTokenService {
 
     public static void setSecret(String s) {
         secret = s;
+    }
+
+    public static void setTtlSeconds(long ttl) {
+        ttlSeconds = ttl;
+    }
+
+    public static long getTtlSeconds() {
+        return ttlSeconds;
     }
 
     public static String generateToken(String username) {
@@ -43,7 +52,7 @@ public final class HmacTokenService {
             long ts = Long.parseLong(parts[1]);
             String sig = parts[2];
             long now = Instant.now().getEpochSecond();
-            if (Math.abs(now - ts) > TTL_SECONDS) return false;
+            if (Math.abs(now - ts) > ttlSeconds) return false;
             String payload = username + ":" + ts;
             String expected = hmacHex(payload);
             return constantTimeEquals(expected, sig);
@@ -57,6 +66,19 @@ public final class HmacTokenService {
         String[] parts = token.split(":");
         if (parts.length != 3) return null;
         return parts[0];
+    }
+
+    public static String getTokenExpiryTimestamp(String token) {
+        if (token == null) return null;
+        String[] parts = token.split(":");
+        if (parts.length != 3) return null;
+        try {
+            long ts = Long.parseLong(parts[1]);
+            long expiryEpoch = ts + ttlSeconds;
+            return formatInstant(Instant.ofEpochSecond(expiryEpoch));
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static String hmacHex(String payload) {
@@ -80,5 +102,9 @@ public final class HmacTokenService {
         }
         return result == 0;
     }
-}
 
+    private static String formatInstant(Instant instant) {
+        DateTimeFormatter formatter = DateTimeFormatter.ISO_INSTANT;
+        return formatter.format(instant);
+    }
+}

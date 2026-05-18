@@ -128,14 +128,42 @@ public class CurrencyConversionService {
     private String buildTreasuryApiUrl(LocalDate targetDate, String currency) {
         LocalDate sixMonthsAgo = targetDate.minusMonths(MONTHS_LOOKBACK);
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        // The Treasury rates_of_exchange dataset uses the field name `currency` (full currency name)
+        // rather than ISO codes like "EUR" or "INR". Map common ISO currency codes to the
+        // dataset's currency names (e.g. INR -> Rupee, EUR -> Euro). If no mapping exists,
+        // fall back to the provided value.
+        String treasuryCurrency = mapIsoToTreasuryCurrency(currency);
 
-        return String.format(
-                "%s?filter=currency_code:eq:%s,effective_date:gte:%s,effective_date:lte:%s&sort=-effective_date&limit=1",
-                TREASURY_API_URL,
-                currency,
-                sixMonthsAgo.format(formatter),
-                targetDate.format(formatter)
-        );
+        // Build the URL using UriComponentsBuilder to ensure proper encoding of query params
+        String filterValue = String.format("currency:eq:%s,effective_date:gte:%s,effective_date:lte:%s",
+                treasuryCurrency, sixMonthsAgo.format(formatter), targetDate.format(formatter));
+
+        return org.springframework.web.util.UriComponentsBuilder.fromHttpUrl(TREASURY_API_URL)
+                .queryParam("filter", filterValue)
+                .queryParam("sort", "-effective_date")
+                .queryParam("limit", 1)
+                .toUriString();
+    }
+
+    /**
+     * Map ISO currency codes to the Treasury dataset's currency names.
+     * This is a small mapping for common currencies used by the application.
+     */
+    private String mapIsoToTreasuryCurrency(String iso) {
+        if (iso == null) return "";
+        String code = iso.trim().toUpperCase();
+        return switch (code) {
+            case "USD" -> "Dollar";
+            case "EUR" -> "Euro";
+            case "GBP" -> "Pound";
+            case "INR" -> "Rupee";
+            case "JPY" -> "Yen";
+            case "AUD" -> "Dollar"; // Australia-Dollar entries exist under 'Dollar'
+            case "CAD" -> "Dollar"; // Canada-Dollar
+            case "CHF" -> "Franc";
+            case "CNY" -> "Yuan";
+            default -> iso;
+        };
     }
 
     /**

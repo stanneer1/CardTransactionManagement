@@ -34,8 +34,18 @@ public class HmacAuthenticationFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         String header = request.getHeader("Authorization");
-        if (StringUtils.hasText(header) && header.startsWith("Bearer ")) {
-            String token = header.substring(7);
+        String token = null;
+
+        if (StringUtils.hasText(header)) {
+            // Support both "Bearer <token>" and "HMAC <token>" formats
+            if (header.startsWith("Bearer ")) {
+                token = header.substring(7);
+            } else if (header.startsWith("HMAC ")) {
+                token = header.substring(5);
+            }
+        }
+
+        if (token != null) {
             try {
                 if (HmacTokenService.validateToken(token)) {
                     String username = HmacTokenService.extractUsername(token);
