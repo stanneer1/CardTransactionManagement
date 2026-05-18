@@ -82,7 +82,7 @@ card-transaction-management/
 - **Java Version**: 17+
 - **Build Tool**: Maven
 - **Database**: H2 (local/dev) / PostgreSQL (uat/prod)
-- **Authentication**: Spring Security with Basic Auth
+- **Authentication**: Spring Security with Basic Auth (legacy) and optional HMAC token-based authentication
 - **Testing**: JUnit 5, Mockito
 - **Validation**: Hibernate Validator (Jakarta)
 - **HTTP Client**: RestTemplate / WebFlux
@@ -121,9 +121,44 @@ card-transaction-management/
 ## API Endpoints
 
 ### Authentication
-All endpoints (except `/h2-console` and `/actuator`) require Basic Authentication:
+The application supports two authentication methods:
+
+1) Basic Authentication (legacy / default)
+- All endpoints (except `/h2-console` and `/actuator`) continue to support Basic Authentication for administrative and test access.
 - Username: `admin` or `user`
 - Password: `admin123` or `user123`
+
+2) HMAC token-based authentication (new)
+- A token-issuing endpoint is available at `POST /api/auth/token`. Clients may obtain a short-lived HMAC token by authenticating with Basic Auth (username/password) or other configured credential methods and calling this endpoint.
+- Example request (using Basic Auth to obtain a token):
+
+```bash
+curl -u user:user123 -X POST http://localhost:8080/api/auth/token
+```
+
+- Example token response (JSON):
+
+```json
+{
+  "token": "b3d2f7...",
+  "expiresAt": "2026-05-15T13:45:30Z",
+  "ttlSeconds": 3600
+}
+```
+
+- How to use the token: include it on subsequent API requests using the configured header and scheme. The default header is `Authorization` and default scheme is `HMAC`:
+
+```bash
+curl -H "Authorization: HMAC b3d2f7..." http://localhost:8080/api/v1/transactions
+```
+
+- Alternatively some deployments may accept `X-Auth-Token: <token>` depending on configuration.
+
+- Token TTL and signing secret are configurable (see "Token configuration" below).
+
+Notes on security and options:
+- Replay protection: the token service can be configured to enable replay protection (nonces/timestamps) which requires a small nonce store (in-memory for single-node deployments or Redis/DB for clustered setups).
+- JWT / asymmetric signing: if you prefer stateless tokens or want public-key verification, the project can be switched to issue JWTs signed with an asymmetric keypair instead of HMAC. See the configuration section for options.
 
 ### Transaction Management
 
@@ -354,6 +389,22 @@ export SERVER_PORT=8080
 
 # External API Configuration
 export TREASURY_API_URL=https://api.fiscaldata.treasury.gov/
+
+# Token / Authentication Configuration (optional)
+# HMAC shared secret (use a strong random value; keep out of source control)
+export TOKEN_SECRET=change-me
+# Token lifetime (seconds)
+export TOKEN_TTL_SECONDS=3600
+# Whether to enable replay-protection (true/false)
+export TOKEN_REPLAY_PROTECTION=false
+# Token header and scheme (optional)
+export TOKEN_HEADER=Authorization
+export TOKEN_SCHEME=HMAC
+# Use JWT instead of HMAC: set TOKEN_TYPE=jwt and configure key files below
+export TOKEN_TYPE=hmac
+# JWT key files (when using JWT)
+export JWT_PRIVATE_KEY_FILE=/path/to/private-key.pem
+export JWT_PUBLIC_KEY_FILE=/path/to/public-key.pem
 ```
 
 ### Application Properties (application.yml)
@@ -371,6 +422,94 @@ external:
     treasury:
       base-url: https://fiscal.treasury.gov/
 ```
+
+### Token configuration
+
+The HMAC token service is configurable via `application.yml` or environment variables. Example properties (default names used by the application):
+
+```yaml
+security:
+  token:
+    # HMAC shared secret (can be set via environment variable TOKEN_SECRET)
+    secret: ${TOKEN_SECRET:change-me}
+
+    # Token TTL in seconds (default 3600)
+    ttl-seconds: ${TOKEN_TTL_SECONDS:3600}
+
+    # Header and scheme used to present the token
+    header: ${TOKEN_HEADER:Authorization}
+    scheme: ${TOKEN_SCHEME:HMAC}
+
+    # Replay protection: when true, the service will track nonces/timestamps to prevent replay attacks
+    replay-protection-enabled: ${TOKEN_REPLAY_PROTECTION:false}
+
+    # Optional: token type switch (hmac or jwt). If set to jwt, configure jwt keys below.
+    type: ${TOKEN_TYPE:hmac}
+
+  # JWT keys (used only when type=jwt)
+  jwt:
+    private-key-file: ${JWT_PRIVATE_KEY_FILE:}
+    public-key-file: ${JWT_PUBLIC_KEY_FILE:}
+```
+
+Environment variables supported:
+
+```bash
+TOKEN_SECRET           # HMAC shared secret
+TOKEN_TTL_SECONDS      # Token lifetime in seconds
+TOKEN_HEADER           # Header name to use (default Authorization)
+TOKEN_SCHEME           # Scheme/prefix to use in Authorization header (default HMAC)
+TOKEN_REPLAY_PROTECTION # true/false to enable replay protection storage
+TOKEN_TYPE             # hmac | jwt
+JWT_PRIVATE_KEY_FILE   # path to private key when using JWT
+JWT_PUBLIC_KEY_FILE    # path to public key when using JWT
+```
+
+Recommendations:
+- Use a strong random secret for `TOKEN_SECRET` and keep it out of source control (use environment variables or a secret manager).
+- For scaled/clustered deployments enable `replay-protection-enabled` and back it with Redis or a shared DB.
+- If you need stateless verification by third parties, consider switching to `type: jwt` with an asymmetric keypair.
+
+
+### Operational notes
+
+- Enabling replay protection
+
+  If you set `security.token.replay-protection-enabled: true` (or `TOKEN_REPLAY_PROTECTION=true`) the application will track used nonces/timestamps to mitigate replay attacks. For single-node deployments an in-memory store is sufficient; for clustered environments configure a shared store such as Redis and set the connection accordingly in your environment or profile.
+
+  Example (enable replay protection and point to Redis):
+
+  ```bash
+  export TOKEN_REPLAY_PROTECTION=true
+  export REDIS_URL=redis://localhost:6379/0
+  ```
+
+  Note: the application must be configured to read `REDIS_URL` (see `application-*.yml`) if you want a shared nonce store. Using Redis is recommended for multi-node deployments.
+
+- Switching to JWT (asymmetric signing)
+
+  If you prefer stateless tokens or want third-party verification without sharing secrets, set `security.token.type=jwt` (or `TOKEN_TYPE=jwt`) and provide an RSA keypair. Example using OpenSSL to generate a 2048-bit RSA keypair:
+
+  ```bash
+  # Generate private key
+  openssl genpkey -algorithm RSA -out jwt-private.pem -pkeyopt rsa_keygen_bits:2048
+
+  # Extract public key
+  openssl rsa -pubout -in jwt-private.pem -out jwt-public.pem
+  ```
+
+  Then set environment variables to point to the key files:
+
+  ```bash
+  export TOKEN_TYPE=jwt
+  export JWT_PRIVATE_KEY_FILE=/full/path/to/jwt-private.pem
+  export JWT_PUBLIC_KEY_FILE=/full/path/to/jwt-public.pem
+  ```
+
+  The private key stays on the issuer; the public key can be distributed to trusted verifiers.
+
+  Important: when switching token types, make sure your clients and any reverse proxies expect the new token format and validation rules.
+
 
 ### Profile-Specific Configurations
 
