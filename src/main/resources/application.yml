@@ -7,3 +7,35 @@ external:
   api:
     treasury:
       base-url: https://fiscal.treasury.gov/
+      # Mapping of ISO currency codes to Treasury dataset currency names
+      currency-mappings:
+        USD: Dollar
+        EUR: Euro
+        GBP: Pound
+        INR: Rupee
+        JPY: Yen
+        AUD: Dollar
+        CAD: Dollar
+        CHF: Franc
+        CNY: Yuan
+
+# Management / Metrics (Micrometer + Actuator)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+  metrics:
+    enable:
+      all: true
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5,0.95
+      sla:
+        http.server.requests: 200ms,500ms,1000ms
+

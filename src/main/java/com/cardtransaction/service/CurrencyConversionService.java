@@ -5,7 +5,11 @@ import com.cardtransaction.entity.PurchaseTransaction;
 import com.cardtransaction.exception.CurrencyConversionException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.cardtransaction.config.TreasuryProperties;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestOperations;
 
@@ -27,8 +31,11 @@ public class CurrencyConversionService {
 
     private static final Logger logger = LoggerFactory.getLogger(CurrencyConversionService.class);
 
-    public CurrencyConversionService(RestOperations restTemplate) {
+    private final TreasuryProperties treasuryProperties;
+
+    public CurrencyConversionService(RestOperations restTemplate, TreasuryProperties treasuryProperties) {
         this.restTemplate = restTemplate;
+        this.treasuryProperties = treasuryProperties;
     }
 
     /**
@@ -107,15 +114,33 @@ public class CurrencyConversionService {
             // For testing purposes, we'll return a mock implementation that can be tested
             // In reality, the API endpoint would be called with proper parameters
 
-            String apiUrl = buildTreasuryApiUrl(targetDate, currency);
-            logger.info("Calling Treasury API: " + apiUrl);
-
-            String response = restTemplate.getForObject(apiUrl, String.class);
+            // Fetch response with retry - the fetchTreasuryResponse method is annotated with @Retryable
+            String response = fetchTreasuryResponse(targetDate, currency);
             return parseExchangeRateResponse(response, targetDate, currency);
         } catch (RestClientException e) {
-            logger.warn("Unable to retrieve exchange rate for " + currency + " on " + targetDate + ": " + e.getMessage());
-            throw new CurrencyConversionException(
-                    "Unable to retrieve currency exchange rate due to service error", e);
+            logger.warn("Unable to retrieve exchange rate for {} on {}: {}", currency, targetDate, e.getMessage());
+            throw new CurrencyConversionException("Unable to retrieve currency exchange rate due to service error", e);
+        }
+    }
+
+    /**
+     * Public retriable method that performs the HTTP GET to Treasury API. Annotated with @Retryable
+     * to provide exponential backoff. Retries when RestClientException is thrown.
+     */
+    @Retryable(retryFor = { RestClientException.class }, maxAttempts = 4, backoff = @Backoff(delay = 1000, multiplier = 2))
+    public String fetchTreasuryResponse(LocalDate targetDate, String currency) {
+        String apiUrl = buildTreasuryApiUrl(targetDate, currency);
+        logger.info("Calling Treasury API: {}", apiUrl);
+
+        try {
+            return restTemplate.getForObject(apiUrl, String.class);
+        } catch (HttpStatusCodeException hsce) {
+            // Include the response body for debugging (truncated) but do not log at INFO level to avoid accidental exposure
+            String respBody = hsce.getResponseBodyAsString();
+            String snippet = respBody.length() > 1000 ? respBody.substring(0, 1000) + "...[truncated]" : respBody;
+            logger.debug("Treasury API returned HTTP {}: {}", hsce.getStatusCode(), snippet);
+            // Re-throw as RestClientException so retry mechanism handles it
+            throw hsce;
         }
     }
 
@@ -129,10 +154,9 @@ public class CurrencyConversionService {
         LocalDate sixMonthsAgo = targetDate.minusMonths(MONTHS_LOOKBACK);
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         // The Treasury rates_of_exchange dataset uses the field name `currency` (full currency name)
-        // rather than ISO codes like "EUR" or "INR". Map common ISO currency codes to the
-        // dataset's currency names (e.g. INR -> Rupee, EUR -> Euro). If no mapping exists,
-        // fall back to the provided value.
-        String treasuryCurrency = mapIsoToTreasuryCurrency(currency);
+        // rather than ISO codes like "EUR" or "INR". Use configured mappings (external.api.treasury.currency-mappings)
+        // to translate ISO codes to dataset currency names. If no mapping exists, fall back to the provided value.
+        String treasuryCurrency = treasuryProperties.mapIsoToTreasuryCurrency(currency);
 
         // Build the URL using UriComponentsBuilder to ensure proper encoding of query params
         String filterValue = String.format("currency:eq:%s,effective_date:gte:%s,effective_date:lte:%s",
@@ -145,26 +169,6 @@ public class CurrencyConversionService {
                 .toUriString();
     }
 
-    /**
-     * Map ISO currency codes to the Treasury dataset's currency names.
-     * This is a small mapping for common currencies used by the application.
-     */
-    private String mapIsoToTreasuryCurrency(String iso) {
-        if (iso == null) return "";
-        String code = iso.trim().toUpperCase();
-        return switch (code) {
-            case "USD" -> "Dollar";
-            case "EUR" -> "Euro";
-            case "GBP" -> "Pound";
-            case "INR" -> "Rupee";
-            case "JPY" -> "Yen";
-            case "AUD" -> "Dollar"; // Australia-Dollar entries exist under 'Dollar'
-            case "CAD" -> "Dollar"; // Canada-Dollar
-            case "CHF" -> "Franc";
-            case "CNY" -> "Yuan";
-            default -> iso;
-        };
-    }
 
     /**
      * Parse the Treasury API response to extract exchange rate data
@@ -178,7 +182,7 @@ public class CurrencyConversionService {
             ObjectMapper mapper = new ObjectMapper();
             JsonNode root = mapper.readTree(response);
 
-            if (root.has("data") && root.get("data").isArray() && root.get("data").size() > 0) {
+            if (root.has("data") && root.get("data").isArray() && !root.get("data").isEmpty()) {
                 JsonNode data = root.get("data").get(0);
 
                 if (data.has("exchange_rate")) {
@@ -191,10 +195,15 @@ public class CurrencyConversionService {
                 }
             }
 
+            // No data available for requested filter
+            logger.debug("Treasury API returned no data for currency {} and date {}. Raw response: {}", currency, targetDate,
+                    response == null ? "(empty)" : (response.length() > 1000 ? response.substring(0, 1000) + "...[truncated]" : response));
             return null;
         } catch (Exception e) {
-            logger.error("Error parsing exchange rate response: " + e.getMessage(), e);
-            return null;
+            String snippet = response == null ? "" : (response.length() > 1000 ? response.substring(0, 1000) + "...[truncated]" : response);
+            logger.error("Error parsing exchange rate response for currency {} and date {}: {}", currency, targetDate, e.getMessage());
+            logger.debug("Response body (truncated): {}", snippet);
+            throw new CurrencyConversionException("Error parsing Treasury API response: " + (snippet.isEmpty() ? "(no response)" : snippet), e);
         }
     }
 

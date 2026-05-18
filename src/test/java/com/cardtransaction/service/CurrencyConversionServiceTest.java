@@ -28,6 +28,9 @@ class CurrencyConversionServiceTest {
     @Mock
     private RestOperations restTemplate;
 
+    @Mock
+    private com.cardtransaction.config.TreasuryProperties treasuryProperties;
+
     @InjectMocks
     private CurrencyConversionService service;
 
@@ -35,6 +38,17 @@ class CurrencyConversionServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Provide sensible defaults for currency mapping used by the service
+        org.mockito.Mockito.lenient().when(treasuryProperties.mapIsoToTreasuryCurrency(anyString())).thenAnswer(invocation -> {
+            String arg = invocation.getArgument(0, String.class);
+            if (arg == null) return "";
+            switch (arg.trim().toUpperCase()) {
+                case "USD": return "Dollar";
+                case "EUR": return "Euro";
+                case "INR": return "Rupee";
+                default: return arg;
+            }
+        });
         testTransaction = PurchaseTransaction.builder()
                 .id(1L)
                 .description("Electronics Purchase")
