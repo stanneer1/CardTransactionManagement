@@ -1,5 +1,4 @@
 # CardTransactionManagement
-# CardTransactionManagement
 # Card Transaction Management Application
 
 A production-ready Spring Boot application for managing purchase transactions and converting them to different currencies using Treasury Reporting Rates of Exchange API.

@@ -49,6 +49,8 @@ management:
   endpoint:
     prometheus:
       enabled: true
+    health:
+      show-details: always
   metrics:
     distribution:
       percentiles-histogram:
@@ -57,9 +59,6 @@ management:
         http.server.requests: 0.5,0.95
       sla:
         http.server.requests: 200ms,500ms,1000ms
-  endpoint:
-    health:
-      show-details: always
 
 # Treasury API currency mappings (local overrides)
 external:
