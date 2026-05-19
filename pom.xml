@@ -174,7 +174,7 @@
                         <include>**/*Tests.java</include>
                         <include>**/*IT.java</include>
                     </includes>
-                    <argLine>-Dnet.bytebuddy.experimental=true</argLine>
+                    <argLine>-Dnet.bytebuddy.experimental=true --enable-native-access=ALL-UNNAMED</argLine>
                 </configuration>
             </plugin>
         </plugins>
